@@ -2812,6 +2812,7 @@ pub struct QemuCmdLine<'a> {
 
     devices: Vec<Box<dyn ToQemuParams>>,
     ccw_subchannel: Option<CcwSubChannel>,
+    iommufd_added: bool,
 }
 
 impl<'a> QemuCmdLine<'a> {
@@ -2833,6 +2834,7 @@ impl<'a> QemuCmdLine<'a> {
             bios: None,
             devices: Vec::new(),
             ccw_subchannel,
+            iommufd_added: false,
         };
 
         // add_virtiofs_share() installs the file-backed memory backend when
@@ -3407,8 +3409,13 @@ impl<'a> QemuCmdLine<'a> {
             }
         };
 
-        let iommufd_name = format!("iommufd{}", config.bus);
-        self.add_iommufd(&iommufd_name)?;
+        // All VFIO devices share one iommufd: devices in the same host IOMMU
+        // group must bind to the same iommufd context (kernel restriction).
+        let iommufd_name = "iommufd0".to_string();
+        if !self.iommufd_added {
+            self.add_iommufd(&iommufd_name)?;
+            self.iommufd_added = true;
+        }
 
         let root_port_id = config.bus.clone();
         let root_port = PCIeRootPortDevice::new(&root_port_id, DEFAULT_PCIE_ROOT_BUS)
